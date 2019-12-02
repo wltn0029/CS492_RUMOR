@@ -88,7 +88,8 @@ def constructTree(tree):
     ## 2. construct tree
     for j in tree:
         indexC = j 
-        indexP = tree[j]['parent']
+        indexP = 
+        [j]['parent']
         nodeC = index2node[indexC]
         wordFreq, wordIndex = str2matrix( tree[j]['vec'], tree[j]['maxL'] )
         #print tree[j]['maxL']
@@ -245,7 +246,8 @@ for epoch in range(Nepoch):
         evl = model._evaluate(word_train[i], index_train[i], child_num_train[i], tree_train[i])
         print len(evl) 
         print evl'''
-        loss, pred_y = model.train_step_up(word_train[i], index_train[i], parent_num_train[i], tree_train[i], y_train[i], lr)
+        # loss, pred_y = model.train_step_up(word_train[i], index_train[i], parent_num_train[i], tree_train[i], y_train[i], lr)
+        loss, pred_y = model.forward(word_train[i], index_train[i], parent_num_train[i], tree_train[i], y_train[i], lr)
         #print loss, pred_y
         losses.append(round(loss,2))
         '''if math.isnan(loss):
