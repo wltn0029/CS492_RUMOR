@@ -109,15 +109,15 @@ def constructTree(tree):
                
 ################################# loas data ###################################
 def loadData():
-    print "loading tree label",
+    print( "loading tree label",)
     labelDic = {}
     for line in open(labelPath):
         line = line.rstrip()
         label, eid = line.split('\t')[0], line.split('\t')[2]
         labelDic[eid] = label.lower()   
-    print len(labelDic)
+    print(len(labelDic))
     
-    print "reading tree", ## X
+    print( "reading tree", )
     treeDic = {}
     for line in open(treePath):
         line = line.rstrip()
@@ -126,9 +126,9 @@ def loadData():
         if not treeDic.has_key(eid):
            treeDic[eid] = {}
         treeDic[eid][indexC] = {'parent':indexP, 'max_degree':max_degree, 'maxL':maxL, 'vec':Vec}   
-    print 'tree no:', len(treeDic)
+    print( 'tree no:', len(treeDic))
     
-    print "loading train set", 
+    print( "loading train set", )
     tree_train, word_train, index_train, y_train, c = [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
     for eid in open(trainPath):
@@ -148,9 +148,9 @@ def loadData():
         word_train.append(x_word)
         index_train.append(x_index)
         c += 1
-    print l1,l2,l3,l4
+    print( l1,l2,l3,l4)
     
-    print "loading test set", 
+    print( "loading test set", )
     tree_test,  word_test, index_test, y_test, c = [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
     for eid in open(testPath):
@@ -169,11 +169,11 @@ def loadData():
         word_test.append(x_word)  
         index_test.append(x_index)  
         c += 1
-    print l1,l2,l3,l4
-    print "train no:", len(tree_train), len(word_train), len(index_train),len(y_train) 
-    print "test no:", len(tree_test), len(word_test), len(index_test), len(y_test)
-    print "dim1 for 0:", len(tree_train[0]), len(word_train[0]), len(index_train[0])
-    print "case 0:", tree_train[0][0], word_train[0][0], index_train[0][0]
+    print(l1,l2,l3,l4)
+    print( "train no:", len(tree_train), len(word_train), len(index_train),len(y_train) )
+    print( "test no:", len(tree_test), len(word_test), len(index_test), len(y_test))
+    print( "dim1 for 0:", len(tree_train[0]), len(word_train[0]), len(index_train[0]))
+    print( "case 0:", tree_train[0][0], word_train[0][0], index_train[0][0])
     #exit(0)
     return tree_train, word_train, index_train, y_train, tree_test, word_test, index_test, y_test
 
@@ -185,7 +185,7 @@ tree_train, word_train, index_train, y_train, tree_test, word_test, index_test, 
 t0 = time.time()
 model = BU_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass)
 t1 = time.time()
-print 'Recursive model established,', (t1-t0)/60
+print('Recursive model established,', (t1-t0)/60)
 
 #if os.path.isfile(modelPath):
 #   load_model_Recursive_gruEmb(modelPath, model) 
@@ -207,11 +207,11 @@ for epoch in range(Nepoch):
     random.shuffle(indexs) 
     for i in indexs:
         #print i,
-        loss, pred_y = model.train_step_up(word_train[i], index_train[i], tree_train[i], y_train[i], lr)
+        loss, pred_y = model.forward(word_train[i], index_train[i], tree_train[i], y_train[i], lr)
         #print loss, pred_y
         losses.append(loss)
         num_examples_seen += 1
-    print "epoch=%d: loss=%f" % ( epoch, np.mean(losses) )
+    print( "epoch=%d: loss=%f" % ( epoch, np.mean(losses) ))
     #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n')
     sys.stdout.flush()
     
@@ -219,7 +219,7 @@ for epoch in range(Nepoch):
     if epoch % 5 == 0:
        losses_5.append((num_examples_seen, np.mean(losses))) 
        time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-       print "%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time, num_examples_seen, epoch, np.mean(losses))
+       print( "%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time, num_examples_seen, epoch, np.mean(losses)))
        #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n') 
        #floss.flush()        
        sys.stdout.flush()
@@ -228,14 +228,14 @@ for epoch in range(Nepoch):
            #print j
            prediction.append(model.predict_up(word_test[j], index_test[j], tree_test[j]) )   
        res = evaluation_4class(prediction, y_test) 
-       print 'results:', res
+       print( 'results:', res)
        #floss.write(str(res)+'\n')
        #floss.flush() 
        sys.stdout.flush()
        ## Adjust the learning rate if loss increases
        if len(losses_5) > 1 and losses_5[-1][1] > losses_5[-2][1]:
           lr = lr * 0.5   
-          print "Setting learning rate to %f" % lr
+          print( "Setting learning rate to %f" % lr)
           #floss.write("Setting learning rate to:"+str(lr)+'\n')
           #floss.flush() 
           sys.stdout.flush()

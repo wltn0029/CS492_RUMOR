@@ -185,19 +185,7 @@ class RvNN(object):
         # updates = self.gradient_descent(self.loss)
 
         #train_inputs = [self.x_word, self.x_index, self.tree, self.y]
-        self._train = theano.function(train_inputs,
-                                      [self.loss, self.pred_y],
-                                      updates=updates)
-
-        self._evaluate = theano.function([self.x_word, self.x_index, self.num_parent, self.tree], self.final_state)
-        self._evaluate2 = theano.function([self.x_word, self.x_index, self.num_parent, self.tree], self.tree_states)
-        #self._state = theano.function([self.x_word, self.x_index, self.num_child, self.tree], self.tree_states)
-
-        self._predict = theano.function([self.x_word, self.x_index, self.num_parent, self.tree], self.pred_y)
-        
-        self.tree_states_test = self.compute_tree_test(self.x_word, self.x_index, self.tree)
-        self._evaluate3 = theano.function([self.x_word, self.x_index, self.tree], self.tree_states_test)
-
+ 
     '''def _check_input(self, x, tree):
         assert np.array_equal(tree[:, -1], np.arange(len(x) - len(tree), len(x)))
         if not self.irregular_tree:
@@ -225,19 +213,6 @@ class RvNN(object):
         return loss, pred_y
 
 
-    def train_step_up(self, x_word, x_index, num_parent, tree, y, lr):
-        #x_word, x_index, tree = gen_nn_inputs(root_node, max_degree=self.degree, only_leaves_have_vals=False)
-        return self._train(x_word, x_index, num_parent, tree, y, lr)
-        
-    def evaluate(self,  x_word, x_index, num_parent, tree):
-        #x, tree = gen_nn_inputs(root_node, max_degree=self.degree, only_leaves_have_vals=False)
-        #self._check_input(x, tree)
-        return self._evaluate(x_word, x_index, num_parent, tree)
-
-    def predict_up(self, x_word, x_index, num_parent, tree):
-        #x, tree = gen_nn_inputs(root_node, max_degree=self.degree, only_leaves_have_vals=False)
-        #self._check_input(x, tree)
-        return self._predict(x_word, x_index, num_parent, tree)
 
     def init_matrix(self, shape):
         return np.random.normal(scale=0.1, size=shape).astype(torch_dtype)

@@ -121,7 +121,7 @@ def _get_tree_traversal(root_node, start_idx=0, max_degree=None):
     return tree, internal_word, internal_index
 
 ################################ tree rnn class ######################################
-class RvNN(nn.Module):
+class RvNN():
     """Data is represented in a tree structure.
 
     Every leaf and internal node has a data (provided by the input)
@@ -139,7 +139,7 @@ class RvNN(nn.Module):
                  labels_on_nonroot_nodes=False,
                  irregular_tree=True):                 
         assert word_dim > 1 and hidden_dim > 1
-        super(RvNN, self).__init__()
+        #super(RvNN, self).__init__()
         self.word_dim = word_dim
         self.hidden_dim = hidden_dim
         self.Nclass = Nclass
