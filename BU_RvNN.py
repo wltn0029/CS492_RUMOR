@@ -151,6 +151,7 @@ class RvNN():
         self.output_fn = self.create_output_fn()
         self.recursive_unit = self.create_recursive_unit()
         
+        
     def forward(self, x_word, x_index, tree, y, lr):
         train_inputs = [x_word, x_index, tree]
         tree_states = self.compute_tree(train_inputs)
@@ -219,8 +220,8 @@ class RvNN():
         return unit
 
     def compute_tree(self, x_word, x_index, tree):
-        self.recursive_unit = self.create_recursive_unit()
         self.leaf_unit = self.create_leaf_unit()
+
         num_parents = tree.shape[0]  # num internal nodes
         num_leaves = self.num_nodes - num_parents
 
