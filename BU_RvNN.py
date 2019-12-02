@@ -120,8 +120,19 @@ def _get_tree_traversal(root_node, start_idx=0, max_degree=None):
 
     return tree, internal_word, internal_index
 
+
+def hard_sigmoid(x):
+    """
+    Computes element-wise hard sigmoid of x.
+    See e.g. https://github.com/Theano/Theano/blob/master/theano/tensor/nnet/sigm.py#L279
+    """
+    x = (0.2 * x) + 0.5
+    x = F.threshold(-x, -1, -1)
+    x = F.threshold(-x, 0, 0)
+    return x
+
 ################################ tree rnn class ######################################
-class RvNN():
+class RvNN(object):
     """Data is represented in a tree structure.
 
     Every leaf and internal node has a data (provided by the input)
@@ -187,29 +198,24 @@ class RvNN():
         return fn
 
     def create_recursive_unit(self):
-        self.E = torch.tensor(self.init_matrix([self.hidden_dim, self.word_dim]), requires_grad = True))
-        self.W_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]), requires_grad = True))
-        self.U_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]), requires_grad = True))
-        self.b_z = torch.tensor(self.init_vector([self.hidden_dim]), requires_grad = True))
-        self.W_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]), requires_grad = True))
-        self.U_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]), requires_grad = True))
-        self.b_r = torch.tensor(self.init_vector([self.hidden_dim]), requires_grad = True))
-        self.W_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]), requires_grad = True))
-        self.U_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]), requires_grad = True))
-        self.b_h = torch.tensor(self.init_vector([self.hidden_dim]), requires_grad = True))
+        self.E = torch.tensor(self.init_matrix([self.hidden_dim, self.word_dim]),requires_grad = True)
+        self.W_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
+        self.U_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
+        self.b_z = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
+        self.W_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
+        self.U_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
+        self.b_r = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
+        self.W_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
+        self.U_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
+        self.b_h = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
-        def unit(parent_word, parent_index, child_h, child_exists):
-            h_tilde = T.sum(child_h, axis=0)
-            parent_xe = self.E[:,parent_index].dot(parent_word)
-            def hard_sigmoid(x):
-                x = (0.2 * x) + 0.5
-                x = F.threshold(-x, -1, -1)
-                x = F.threshold(-x, 0, 0)
-                return x
-            z = hard_sigmoid(self.W_z.dot(parent_xe)+self.U_z.dot(h_tilde)+self.b_z)
-            r = hard_sigmoid(self.W_r.dot(parent_xe)+self.U_r.dot(h_tilde)+self.b_r)
-            c = F.tanh(self.W_h.dot(parent_xe)+self.U_h.dot(h_tilde * r)+self.b_h)
-            h = z*h_tilde + (1-z)*c
+        def unit(word, index, parent_h):
+            #h_tilde = T.sum(child_h, axis=0)
+            child_xe = self.E[:,index].dot(word)
+            z = hard_sigmoid(self.W_z.dot(child_xe)+self.U_z.dot(parent_h)+self.b_z)
+            r = hard_sigmoid(self.W_r.dot(child_xe)+self.U_r.dot(parent_h)+self.b_r)
+            c = torch.nn.tanh(self.W_h.dot(child_xe)+self.U_h.dot(parent_h * r)+self.b_h)
+            h = z*parent_h + (1-z)*c
             return h
         return unit
 
@@ -226,9 +232,8 @@ class RvNN():
         num_leaves = self.num_nodes - num_parents
 
         # compute leaf hidden states
-        leaf_h, _ = theano.map(
-            fn=self.leaf_unit,
-            sequences=[ x_word[:num_leaves], x_index[:num_leaves] ])
+        leaf_h= torch.tensor([self.leaf_unit(w, i) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])])
+
         if self.irregular_tree:
             init_node_h = torch.cat([leaf_h, leaf_h, leaf_h], axis=0)
         else:
