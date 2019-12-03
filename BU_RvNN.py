@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 
 #torch_dtype = 'float64'
-torch_dtype = torch.float32
+torch_dtype = torch.float64
 
 class Node_tweet(object):
     def __init__(self, idx=None):
@@ -211,11 +211,10 @@ class RvNN(object):
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
         def unit(parent_word, parent_index, child_h, child_exists):
             h_tilde = torch.sum(child_h, dim=0)
-            print(parent_word.shape)
-            parent_xe = self.E[:,parent_index].dot(parent_word)
-            z = Thard_sigmoid(self.W_z.dot(parent_xe)+self.U_z.dot(h_tilde)+self.b_z)
-            r = hard_sigmoid(self.W_r.dot(parent_xe)+self.U_r.dot(h_tilde)+self.b_r)
-            c = torch.nn.tanh(self.W_h.dot(parent_xe)+self.U_h.dot(h_tilde * r)+self.b_h)
+            parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word))
+            z = hard_sigmoid(self.W_z.matmul(parent_xe)+self.U_z.matmul(h_tilde)+self.b_z)
+            r = hard_sigmoid(self.W_r.matmul(parent_xe)+self.U_r.matmul(h_tilde)+self.b_r)
+            c = torch.tanh(self.W_h.matmul(parent_xe)+self.U_h.matmul(h_tilde * r)+self.b_h)
             h = z*h_tilde + (1-z)*c
             return h
         return unit
@@ -233,18 +232,20 @@ class RvNN(object):
         num_leaves = self.num_nodes - num_parents
 
         # compute leaf hidden states
-        leaf_h= torch.tensor([self.leaf_unit(w, i) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])])
-
+        print(self.leaf_unit(x_word[0],x_index[0]).shape)
+        leaf_h= torch.cat([self.leaf_unit(w, i).reshape(-1,1) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])], dim=1)
+        print(leaf_h.shape) 
         if self.irregular_tree:
-            init_node_h = torch.cat([leaf_h, leaf_h, leaf_h], axis=0)
+            init_node_h = torch.cat([leaf_h, leaf_h, leaf_h], dim=0)
         else:
             init_node_h = leaf_h
 
         # use recurrence to compute internal node hidden states
         def _recurrence(x_word, x_index, node_info, t, node_h, last_h):
-            child_exists = node_info > -1
+            child_exists = torch.tensor(node_info > -1)
             offset = 2*num_leaves * int(self.irregular_tree) - child_exists * t ### offset???
-            child_h = node_h[node_info + offset] * child_exists.dimshuffle(0, 'x') ### transpose??
+            print(node_info.shape, offset.shape, node_h.shape, child_exists.shape)
+            child_h = node_h[torch.tensor(node_info) + offset] * child_exists.reshape(-1,1) ### transpose??
             parent_h = self.recursive_unit(x_word, x_index, child_h, child_exists)
             node_h = torch.cat([node_h,
                                     parent_h.reshape([1, self.hidden_dim])])
@@ -253,7 +254,7 @@ class RvNN(object):
         dummy = torch.zeros([self.hidden_dim], dtype=torch_dtype)
         parent_h=[]
         for step in range(num_parents):
-            w, x, t = word[num_leaves+step], x_index[num_leaves+step], tree[step] 
+            w, x, t = x_word[num_leaves+step], x_index[num_leaves+step], tree[step] 
             parent_h.append(_recurrence(w,x,t,step,init_node_h, dummy)[1])
         parent_h = torch.tensor(parent_h)
         return torch.cat([leaf_h, parent_h], axis=0)
