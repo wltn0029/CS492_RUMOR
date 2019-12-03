@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
+#from collections import OrderedDict
 
 
 #torch_dtype = 'float64'
@@ -164,8 +164,8 @@ class RvNN(object):
         
         
     def forward(self, x_word, x_index, tree, y, lr):
-        train_inputs = [x_word, x_index, tree]
-        tree_states = self.compute_tree(train_inputs)
+        self.num_nodes = x_word.shape[0]
+        tree_states = self.compute_tree(x_word, x_index, tree)
         final_state = self.tree_states[-1]
         pred_y = self.create_output_fn(final_state)
         loss = self.loss_fn(y, pred_y)
@@ -184,14 +184,14 @@ class RvNN(object):
     """
 
     def init_matrix(self, shape):
-        return np.random.normal(scale=0.1, size=shape).astype(torch_dtype)
+        return np.random.normal(scale=0.1, size=shape).astype(np.float)
 
     def init_vector(self, shape):
-        return np.zeros(shape, dtype=torch_dtype)
+        return np.zeros(shape, dtype=np.float)
 
     def create_output_fn(self):
-        self.W_out = torch.tensor(self.init_matrix([self.Nclass, self.hidden_dim]),requires_grad = True))
-        self.b_out = torch.tensor(self.init_vector([self.Nclass]), requires_grad = True))
+        self.W_out = torch.tensor(self.init_matrix([self.Nclass, self.hidden_dim]),requires_grad = True)
+        self.b_out = torch.tensor(self.init_vector([self.Nclass]), requires_grad = True)
         self.params.extend([self.W_out, self.b_out])
         def fn(final_state):
             return F.softmax( self.W_out.dot(final_state)+ self.b_out )
@@ -209,13 +209,14 @@ class RvNN(object):
         self.U_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
         self.b_h = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
-        def unit(word, index, parent_h):
-            #h_tilde = T.sum(child_h, axis=0)
-            child_xe = self.E[:,index].dot(word)
-            z = hard_sigmoid(self.W_z.dot(child_xe)+self.U_z.dot(parent_h)+self.b_z)
-            r = hard_sigmoid(self.W_r.dot(child_xe)+self.U_r.dot(parent_h)+self.b_r)
-            c = torch.nn.tanh(self.W_h.dot(child_xe)+self.U_h.dot(parent_h * r)+self.b_h)
-            h = z*parent_h + (1-z)*c
+        def unit(parent_word, parent_index, child_h, child_exists):
+            h_tilde = torch.sum(child_h, dim=0)
+            print(parent_word.shape)
+            parent_xe = self.E[:,parent_index].dot(parent_word)
+            z = Thard_sigmoid(self.W_z.dot(parent_xe)+self.U_z.dot(h_tilde)+self.b_z)
+            r = hard_sigmoid(self.W_r.dot(parent_xe)+self.U_r.dot(h_tilde)+self.b_r)
+            c = torch.nn.tanh(self.W_h.dot(parent_xe)+self.U_h.dot(h_tilde * r)+self.b_h)
+            h = z*h_tilde + (1-z)*c
             return h
         return unit
 
@@ -266,7 +267,7 @@ class RvNN(object):
         grad = [p.grad for p in self.params]
         self.momentum_velocity_ = [0.] * len(grad)
         grad_norm = torch.sqrt(sum(map(lambda x: x.pow(2).sum(), grad)))
-        not_finite = torch.isnan(grad_norm)|torch.isinf(grad_norm))
+        not_finite = torch.isnan(grad_norm)|torch.isinf(grad_norm)
         scaling_den = torch.max(5.0, grad_norm)
         for n, (param, grad_i) in enumerate(zip(self.params, grad)):
             if not_finite:

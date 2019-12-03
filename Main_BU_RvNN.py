@@ -9,14 +9,15 @@
 """
 
 import sys
-reload(sys)
-sys.setdefaultencoding('utf-8')
+#reload(sys)
+#sys.setdefaultencoding('utf-8')
 
 import os
 import BU_RvNN
 
-import theano
-from theano import tensor as T
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from numpy.testing import assert_array_almost_equal
 
@@ -83,7 +84,7 @@ def constructTree(tree):
     ## 1. ini tree node
     index2node = {}
     for i in tree:
-        node = tree_gru.Node_tweet(idx=i)
+        node = BU_RvNN.Node_tweet(idx=i)
         index2node[i] = node
     ## 2. construct tree
     for j in tree:
@@ -104,7 +105,7 @@ def constructTree(tree):
            root = nodeC
     ## 3. convert tree to DNN input    
     degree = tree[j]['max_degree']   
-    x_word, x_index, tree = tree_gru.gen_nn_inputs(root, max_degree=degree, only_leaves_have_vals=False)    
+    x_word, x_index, tree = BU_RvNN.gen_nn_inputs(root, max_degree=degree, only_leaves_have_vals=False)    
     return x_word, x_index, tree       
                
 ################################# loas data ###################################
@@ -123,7 +124,7 @@ def loadData():
         line = line.rstrip()
         eid, indexP, indexC = line.split('\t')[0], line.split('\t')[1], int(line.split('\t')[2])
         max_degree, maxL, Vec = int(line.split('\t')[3]), int(line.split('\t')[4]), line.split('\t')[5]       
-        if not treeDic.has_key(eid):
+        if not treeDic.get(eid):
            treeDic[eid] = {}
         treeDic[eid][indexC] = {'parent':indexP, 'max_degree':max_degree, 'maxL':maxL, 'vec':Vec}   
     print( 'tree no:', len(treeDic))
@@ -134,8 +135,8 @@ def loadData():
     for eid in open(trainPath):
         #if c > 8: break
         eid = eid.rstrip()
-        if not labelDic.has_key(eid): continue
-        if not treeDic.has_key(eid): continue 
+        if not labelDic.get(eid): continue
+        if not treeDic.get(eid): continue 
         if len(treeDic[eid]) < 2: continue
         ## 1. load label
         label = labelDic[eid]
@@ -156,8 +157,8 @@ def loadData():
     for eid in open(testPath):
         #if c > 4: break
         eid = eid.rstrip()
-        if not labelDic.has_key(eid): continue
-        if not treeDic.has_key(eid): continue 
+        if not labelDic.get(eid): continue
+        if not treeDic.get(eid): continue 
         if len(treeDic[eid]) < 2: continue        
         ## 1. load label        
         label = labelDic[eid]
