@@ -9,14 +9,12 @@
 """
 
 import sys
-reload(sys)
-sys.setdefaultencoding('utf-8')
+#reload(sys)
+#sys.setdefaultencoding('utf-8')
 
 import TD_RvNN
 import math
 
-import theano
-from theano import tensor as T
 import numpy as np
 from numpy.testing import assert_array_almost_equal
 
@@ -24,7 +22,6 @@ import time
 import datetime
 import random
 from evaluate import *
-#from Util import *
 
 obj = "Twitter15" # choose dataset, you can choose either "Twitter15" or "Twitter16"
 fold = "2" # fold index, choose from 0-4
@@ -39,11 +36,17 @@ unit="TD_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag
 #lossPath = "../loss/loss-"+unit+".txt"
 #modelPath = "../param/param-"+unit+".npz" 
 
-treePath = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+#treePath = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
 
-trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
-testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
-labelPath = "../resource/"+obj+"_label_All.txt"
+#trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
+#testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
+#labelPath = "../resource/"+obj+"_label_All.txt"
+
+
+treePath = '../Rumor_RvNN/resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+trainPath = "../Rumor_RvNN/nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
+testPath = "../Rumor_RvNN/nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
+labelPath = "../Rumor_RvNN/resource/"+obj+"_label_All.txt"
 
 #floss = open(lossPath, 'a+')
 
@@ -108,11 +111,11 @@ def constructTree(tree):
     ini_x, ini_index = str2matrix( "0:0", tree[j]['maxL'] )
     #x_word, x_index, tree = tree_gru_u2b.gen_nn_inputs(root, ini_x, ini_index) 
     x_word, x_index, tree = TD_RvNN.gen_nn_inputs(root, ini_x) 
-    return x_word, x_index, tree, parent_num       
-               
+    return x_word, x_index, tree, parent_num
+
 ################################# loas data ###################################
 def loadData():
-    print "loading tree label",
+    print ("loading tree label"),
     labelDic = {}
     for line in open(labelPath):
         line = line.rstrip()
@@ -127,7 +130,7 @@ def loadData():
         eid, indexP, indexC = line.split('\t')[0], line.split('\t')[1], int(line.split('\t')[2])
         parent_num, maxL = int(line.split('\t')[3]), int(line.split('\t')[4])  
         Vec =  line.split('\t')[5] 
-        if not treeDic.has_key(eid):
+        if treeDic.get(eid) is None:
            treeDic[eid] = {}
         treeDic[eid][indexC] = {'parent':indexP, 'parent_num':parent_num, 'maxL':maxL, 'vec':Vec}   
     print( 'tree no:', len(treeDic))
@@ -138,8 +141,8 @@ def loadData():
     for eid in open(trainPath):
         #if c > 8: break
         eid = eid.rstrip()
-        if not labelDic.has_key(eid): continue
-        if not treeDic.has_key(eid): continue 
+        if labelDic.get(eid) is None: continue
+        if treeDic.get(eid) is None: continue 
         if len(treeDic[eid]) <= 0: 
            #print labelDic[eid]
            continue
@@ -159,15 +162,15 @@ def loadData():
         #exit(0)
         c += 1
     print( l1,l2,l3,l4)
-    
+
     print( "loading test set", )
     tree_test, word_test, index_test, parent_num_test, y_test, c = [], [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
     for eid in open(testPath):
         #if c > 4: break
         eid = eid.rstrip()
-        if not labelDic.has_key(eid): continue
-        if not treeDic.has_key(eid): continue 
+        if labelDic.get(eid) is None: continue
+        if treeDic.get(eid) is None: continue
         if len(treeDic[eid]) <= 0: 
            #print labelDic[eid] 
            continue        
@@ -206,7 +209,7 @@ print('Recursive model established,', (t1-t0)/60)
 #if os.path.isfile(modelPath):
 #   load_model_Recursive_gruEmb(modelPath, model)
 #   lr = 0.0001
-   
+
 ######debug here######
 #print len(tree_test[121]), len(index_test[121]), len(word_test[121])
 #print tree_test[121]
@@ -247,7 +250,7 @@ for epoch in range(Nepoch):
         print evl'''
         loss, pred_y = model.forward(word_train[i], index_train[i], parent_num_train[i], tree_train[i], y_train[i], lr)
         #print loss, pred_y
-        losses.append(round(loss,2))
+        losses.append(round(float(loss),2))
         '''if math.isnan(loss):
         #   continue 
            print loss, pred_y
@@ -262,33 +265,39 @@ for epoch in range(Nepoch):
     sys.stdout.flush()
     #print losses
     #exit(0)
-    
+
     ## cal loss & evaluate
     if epoch % 5 == 0:
-       losses_5.append((num_examples_seen, np.mean(losses))) 
-       time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-       print("%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time, num_examples_seen, epoch, np.mean(losses)))
-       #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n') 
-       #floss.flush()       
-       sys.stdout.flush()
-       prediction = []
-       for j in range(len(y_test)):
-           #print j
-           prediction.append(model.predict_up(word_test[j], index_test[j], parent_num_test[j], tree_test[j]) )   
-       res = evaluation_4class(prediction, y_test) 
-       print('results:', res)
-       #floss.write(str(res)+'\n')
-       #floss.flush() 
-       sys.stdout.flush()
-       ## Adjust the learning rate if loss increases
-       if len(losses_5) > 1 and losses_5[-1][1] > losses_5[-2][1]:
-          lr = lr * 0.5   
-          print("Setting learning rate to %f" % lr)
-          #floss.write("Setting learning rate to:"+str(lr)+'\n')
-          #floss.flush() 
-          sys.stdout.flush()
-       #save_model_Recursive_gruEmb(modelPath, model)   
+        losses_5.append((num_examples_seen, np.mean(losses)))
+        time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print("%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time, num_examples_seen, epoch, np.mean(losses)))
+        #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n') 
+        #floss.flush()       
+        sys.stdout.flush()
+        prediction = []
+        for j in range(len(y_test)):
+            #print j
+            prediction.append(model.predict_up(word_test[j], index_test[j],
+                                               parent_num_test[j], tree_test[j]).tolist())
+
+        print(prediction[0])
+        print(y_test[0])
+        print(type(prediction[0]))
+        print(type(y_test[0]))
+        res = evaluation_4class(prediction, y_test)
+        print('results:', res)
+        #floss.write(str(res)+'\n')
+        #floss.flush() 
+        sys.stdout.flush()
+        ## Adjust the learning rate if loss increases
+        if len(losses_5) > 1 and losses_5[-1][1] > losses_5[-2][1]:
+            lr = lr * 0.5
+            print("Setting learning rate to %f" % lr)
+            #floss.write("Setting learning rate to:"+str(lr)+'\n')
+            #floss.flush() 
+            sys.stdout.flush()
+        #save_model_Recursive_gruEmb(modelPath, model)   
     #floss.flush()
     losses = []
-    
+
 #floss.close()    
