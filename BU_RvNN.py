@@ -77,8 +77,6 @@ def _get_leaf_vals(root_node):
         leaf.idx = idx
         X_word.append(leaf.word)
         X_index.append(leaf.index)
-        #print idx, leaf
-        #print leaf.word
     return X_word, X_index
 
 
@@ -148,7 +146,8 @@ class RvNN(object):
                 degree=2, momentum=0.9,
                  trainable_embeddings=True,
                  labels_on_nonroot_nodes=False,
-                 irregular_tree=True):                 
+                 irregular_tree=True,
+                 device='cpu'):                 
         assert word_dim > 1 and hidden_dim > 1
         #super(RvNN, self).__init__()
         self.word_dim = word_dim
@@ -157,6 +156,7 @@ class RvNN(object):
         self.degree = degree
         self.momentum = momentum
         self.irregular_tree = irregular_tree
+        self.device=device
 
         self.params = []
         self.output_fn = self.create_output_fn()
@@ -166,22 +166,19 @@ class RvNN(object):
     def forward(self, x_word, x_index, tree, y, lr):
         self.num_nodes = x_word.shape[0]
         tree_states = self.compute_tree(x_word, x_index, tree)
-        final_state = self.tree_states[-1]
-        pred_y = self.create_output_fn(final_state)
+        final_state = tree_states[-1]
+        pred_y = self.output_fn(final_state)
         loss = self.loss_fn(y, pred_y)
         self.gradient_descent(loss, lr)
-        return loss, pred_y
-        
-    """
-    def evaluate(self, root_node):
-        self.tree_states = self.compute_tree(self.x_word, self.x_index, self.tree)
-        self.final_state = self.tree_states[-1]
-        self._evaluate = theano.function([self.x_word, self.x_index, self.tree], self.final_state)
+        return loss, pred_y.tolist()
+    
+    def predict_up(self,x_word, x_index, tree):
+        self.num_nodes = x_word.shape[0]
+        tree_states = self.compute_tree(x_word, x_index, tree)
+        final_state = tree_states[-1]
+        pred_y = self.output_fn(final_state)
+        return pred_y.tolist()
 
-        x, tree = gen_nn_inputs(root_node, max_degree=self.degree, only_leaves_have_vals=False)
-        self._check_input(x, tree)
-        return self._evaluate(x, tree[:, :-1])
-    """
 
     def init_matrix(self, shape):
         return np.random.normal(scale=0.1, size=shape).astype(np.float)
@@ -190,28 +187,28 @@ class RvNN(object):
         return np.zeros(shape, dtype=np.float)
 
     def create_output_fn(self):
-        self.W_out = torch.tensor(self.init_matrix([self.Nclass, self.hidden_dim]),requires_grad = True)
-        self.b_out = torch.tensor(self.init_vector([self.Nclass]), requires_grad = True)
+        self.W_out = torch.tensor(self.init_matrix([self.Nclass, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.b_out = torch.tensor(self.init_vector([self.Nclass]), requires_grad = True, device=self.device)
         self.params.extend([self.W_out, self.b_out])
         def fn(final_state):
-            return F.softmax( self.W_out.dot(final_state)+ self.b_out )
+            return F.softmax( self.W_out.matmul(final_state)+ self.b_out, dim=0)
         return fn
 
     def create_recursive_unit(self):
-        self.E = torch.tensor(self.init_matrix([self.hidden_dim, self.word_dim]),requires_grad = True)
-        self.W_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
-        self.U_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
-        self.b_z = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
-        self.W_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
-        self.U_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
-        self.b_r = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
-        self.W_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
-        self.U_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True)
-        self.b_h = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True)
+        self.E = torch.tensor(self.init_matrix([self.hidden_dim, self.word_dim]),requires_grad = True, device=self.device)
+        self.W_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.U_z = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.b_z = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True, device=self.device)
+        self.W_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.U_r = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.b_r = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True, device=self.device)
+        self.W_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.U_h = torch.tensor(self.init_matrix([self.hidden_dim, self.hidden_dim]),requires_grad = True, device=self.device)
+        self.b_h = torch.tensor(self.init_vector([self.hidden_dim]),requires_grad = True, device=self.device)
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
         def unit(parent_word, parent_index, child_h, child_exists):
             h_tilde = torch.sum(child_h, dim=0)
-            parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word))
+            parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device))
             z = hard_sigmoid(self.W_z.matmul(parent_xe)+self.U_z.matmul(h_tilde)+self.b_z)
             r = hard_sigmoid(self.W_r.matmul(parent_xe)+self.U_r.matmul(h_tilde)+self.b_r)
             c = torch.tanh(self.W_h.matmul(parent_xe)+self.U_h.matmul(h_tilde * r)+self.b_h)
@@ -232,9 +229,7 @@ class RvNN(object):
         num_leaves = self.num_nodes - num_parents
 
         # compute leaf hidden states
-        print(self.leaf_unit(x_word[0],x_index[0]).shape)
-        leaf_h= torch.cat([self.leaf_unit(w, i).reshape(-1,1) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])], dim=1)
-        print(leaf_h.shape) 
+        leaf_h= torch.cat([self.leaf_unit(w, i).reshape(1,-1) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])], dim=0)
         if self.irregular_tree:
             init_node_h = torch.cat([leaf_h, leaf_h, leaf_h], dim=0)
         else:
@@ -242,25 +237,25 @@ class RvNN(object):
 
         # use recurrence to compute internal node hidden states
         def _recurrence(x_word, x_index, node_info, t, node_h, last_h):
-            child_exists = torch.tensor(node_info > -1)
-            offset = 2*num_leaves * int(self.irregular_tree) - child_exists * t ### offset???
-            print(node_info.shape, offset.shape, node_h.shape, child_exists.shape)
-            child_h = node_h[torch.tensor(node_info) + offset] * child_exists.reshape(-1,1) ### transpose??
-            parent_h = self.recursive_unit(x_word, x_index, child_h, child_exists)
-            node_h = torch.cat([node_h,
-                                    parent_h.reshape([1, self.hidden_dim])])
+            child_exists = node_info > -1
+            offset = 2*num_leaves * int(self.irregular_tree) - child_exists * t -1### offset???
+            child_h = node_h[node_info + offset].t()*torch.tensor(child_exists, dtype=torch_dtype, device=self.device)
+            parent_h = self.recursive_unit(x_word, x_index, child_h.t(), child_exists)
+            node_h = torch.cat([node_h, parent_h.reshape([1, self.hidden_dim])])
+            
             return node_h[1:], parent_h
 
         dummy = torch.zeros([self.hidden_dim], dtype=torch_dtype)
         parent_h=[]
         for step in range(num_parents):
             w, x, t = x_word[num_leaves+step], x_index[num_leaves+step], tree[step] 
-            parent_h.append(_recurrence(w,x,t,step,init_node_h, dummy)[1])
-        parent_h = torch.tensor(parent_h)
-        return torch.cat([leaf_h, parent_h], axis=0)
+            parent_h.append(_recurrence(w,x,t,step,init_node_h, dummy)[1].reshape(1,-1))
+        parent_h = torch.cat(parent_h, dim=0)
+
+        return torch.cat([leaf_h, parent_h], dim=0)
 
     def loss_fn(self, y, pred_y):
-        return torch.sum((y - pred_y)**2)
+        return torch.sum((torch.tensor(y, device=self.device) - pred_y)**2)
 
     def gradient_descent(self, loss, lr):
         """Momentum GD with gradient clipping."""
@@ -269,14 +264,15 @@ class RvNN(object):
         self.momentum_velocity_ = [0.] * len(grad)
         grad_norm = torch.sqrt(sum(map(lambda x: x.pow(2).sum(), grad)))
         not_finite = torch.isnan(grad_norm)|torch.isinf(grad_norm)
-        scaling_den = torch.max(5.0, grad_norm)
+        scaling_den = max(5.0, grad_norm)
         for n, (param, grad_i) in enumerate(zip(self.params, grad)):
-            if not_finite:
+            if not_finite :
                 grad_i = 0.1 * param
-            else:
+            else :
                 grad_i = grad_i * (5.0 / scaling_den)
             velocity = self.momentum_velocity_[n]
             update_step = self.momentum * velocity - lr * grad_i
             self.momentum_velocity_[n] = update_step
-            param.add_(update_step)
-        
+            #with torch.no_grad():
+            param.data.add_(update_step)
+            param.grad.zero_()

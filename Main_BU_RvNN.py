@@ -182,9 +182,13 @@ def loadData():
 ## 1. load tree & word & index & label
 tree_train, word_train, index_train, y_train, tree_test, word_test, index_test, y_test = loadData()
 
+## 1.5. Check device and get device (gpu, cpu)
+#device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device='cpu'
+
 ## 2. ini RNN model
 t0 = time.time()
-model = BU_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass)
+model = BU_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
 t1 = time.time()
 print('Recursive model established,', (t1-t0)/60)
 
@@ -210,9 +214,9 @@ for epoch in range(Nepoch):
         #print i,
         loss, pred_y = model.forward(word_train[i], index_train[i], tree_train[i], y_train[i], lr)
         #print loss, pred_y
-        losses.append(loss)
+        losses.append(float(loss))
         num_examples_seen += 1
-    print( "epoch=%d: loss=%f" % ( epoch, np.mean(losses) ))
+    print( "epoch=%d: loss=%.4f" % ( epoch, np.mean(losses) ))
     #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n')
     sys.stdout.flush()
     

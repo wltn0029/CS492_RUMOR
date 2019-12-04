@@ -23,6 +23,7 @@ import datetime
 import random
 from evaluate import *
 
+import torch
 obj = "Twitter15" # choose dataset, you can choose either "Twitter15" or "Twitter16"
 fold = "2" # fold index, choose from 0-4
 tag = "_u2b"
@@ -36,17 +37,13 @@ unit="TD_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag
 #lossPath = "../loss/loss-"+unit+".txt"
 #modelPath = "../param/param-"+unit+".npz" 
 
-#treePath = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+treePath = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
 
-#trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
-#testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
-#labelPath = "../resource/"+obj+"_label_All.txt"
+trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
+testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
+labelPath = "../resource/"+obj+"_label_All.txt"
 
 
-treePath = '../Rumor_RvNN/resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
-trainPath = "../Rumor_RvNN/nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
-testPath = "../Rumor_RvNN/nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
-labelPath = "../Rumor_RvNN/resource/"+obj+"_label_All.txt"
 
 #floss = open(lossPath, 'a+')
 
@@ -122,7 +119,7 @@ def loadData():
         label, eid = line.split('\t')[0], line.split('\t')[2]
         labelDic[eid] = label.lower()   
     print( len(labelDic))
-    
+
     print( "reading tree", )## X
     treeDic = {}
     for line in open(treePath):
@@ -134,7 +131,7 @@ def loadData():
            treeDic[eid] = {}
         treeDic[eid][indexC] = {'parent':indexP, 'parent_num':parent_num, 'maxL':maxL, 'vec':Vec}   
     print( 'tree no:', len(treeDic))
-    
+
     print( "loading train set", )
     tree_train, word_train, index_train, y_train, parent_num_train, c = [], [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
@@ -173,7 +170,7 @@ def loadData():
         if treeDic.get(eid) is None: continue
         if len(treeDic[eid]) <= 0: 
            #print labelDic[eid] 
-           continue        
+           continue
         ## 1. load label        
         label = labelDic[eid]
         y, l1,l2,l3,l4 = loadLabel(label, l1, l2, l3, l4)
@@ -200,9 +197,13 @@ def loadData():
 ## 1. load tree & word & index & label
 tree_train, word_train, index_train, parent_num_train, y_train, tree_test, word_test, index_test, parent_num_test, y_test = loadData()
 
+
+## 1.5. Check device and get device (gpu, cpu)
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 ## 2. ini RNN model
 t0 = time.time()
-model = TD_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass)
+model = TD_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
 t1 = time.time()
 print('Recursive model established,', (t1-t0)/60)
 
@@ -236,6 +237,7 @@ print 'lo:',tree_states_test[parent_num_train[i]:]'''
 losses_5, losses = [], []
 num_examples_seen = 0
 for epoch in range(Nepoch):
+    start = time.time()
     ## one SGD 
     indexs = [i for i in range(len(y_train))]
     #random.shuffle(indexs) 
@@ -260,7 +262,7 @@ for epoch in range(Nepoch):
            print word_train[i]
            print 'final_state:',model._evaluate(word_train[i], index_train[i], parent_num_train[i], tree_train[i])'''
         num_examples_seen += 1
-    print("epoch=%d: loss=%f" % ( epoch, np.mean(losses) ))
+    print("epoch=%d: loss=%f, time=%d" % ( epoch, np.mean(losses), time.time() - start))
     #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n')
     sys.stdout.flush()
     #print losses
@@ -269,8 +271,8 @@ for epoch in range(Nepoch):
     ## cal loss & evaluate
     if epoch % 5 == 0:
         losses_5.append((num_examples_seen, np.mean(losses)))
-        time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print("%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time, num_examples_seen, epoch, np.mean(losses)))
+        time_ = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print("%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time_, num_examples_seen, epoch, np.mean(losses)))
         #floss.write(str(time)+": epoch="+str(epoch)+" loss="+str(loss) +'\n') 
         #floss.flush()       
         sys.stdout.flush()
