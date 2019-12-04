@@ -33,7 +33,7 @@ tag = ""
 vocabulary_size = 5000
 hidden_dim = 100
 Nclass = 4
-Nepoch = 500
+Nepoch = 400
 lr = 0.005
 
 unit="BU_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag

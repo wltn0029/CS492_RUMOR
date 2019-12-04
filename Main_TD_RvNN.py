@@ -30,7 +30,7 @@ tag = "_u2b"
 vocabulary_size = 5000
 hidden_dim = 100
 Nclass = 4
-Nepoch = 600
+Nepoch = 500
 lr = 0.005
 
 unit="TD_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag

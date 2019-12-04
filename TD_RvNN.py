@@ -178,7 +178,7 @@ class RvNN(object):
         init_node_h = torch.tensor(self.init_vector([self.num_nodes, self.hidden_dim]), requires_grad = True, device=self.device)
 
         # use recurrence to compute internal node hidden states
-        def _recurrence(x_word, x_index, node_info, node_h, last_h):
+        def _recurrence(x_word, x_index, node_info, node_h):
             parent_h = node_h[node_info[0]]
             child_h = self.recursive_unit(x_word, x_index, parent_h)
             #node_h[node_info[1]] = child_h
@@ -187,13 +187,13 @@ class RvNN(object):
                                     node_h[node_info[1]+1:]])
             return node_h, child_h
 
-        dummy = torch.tensor(self.init_vector([self.hidden_dim]), requires_grad = True, device=self.device)
+        # dummy = torch.tensor(self.init_vector([self.hidden_dim]), requires_grad = True, device=self.device)
 
 
         child_hs = []
         node_h = init_node_h
         for x_word_i, x_index_i, tree_i in zip(x_word[:-1], x_index, tree) :
-            (updated_node_h, child_hs_i)=_recurrence(x_word_i, x_index_i, tree_i, node_h, dummy)
+            (updated_node_h, child_hs_i)=_recurrence(x_word_i, x_index_i, tree_i, node_h)
             child_hs.append(child_hs_i.reshape(1, -1))
             node_h = updated_node_h
         return torch.cat(child_hs[num_parent-1:], 0)

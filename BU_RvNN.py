@@ -236,7 +236,7 @@ class RvNN(object):
             init_node_h = leaf_h
 
         # use recurrence to compute internal node hidden states
-        def _recurrence(x_word, x_index, node_info, t, node_h, last_h):
+        def _recurrence(x_word, x_index, node_info, t, node_h):
             child_exists = node_info > -1
             offset = 2*num_leaves * int(self.irregular_tree) - child_exists * t -1### offset???
             child_h = node_h[node_info + offset].t()*torch.tensor(child_exists, dtype=torch_dtype, device=self.device)
@@ -245,12 +245,16 @@ class RvNN(object):
             
             return node_h[1:], parent_h
 
-        dummy = torch.zeros([self.hidden_dim], dtype=torch_dtype)
-        parent_h=[]
+        #dummy = torch.zeros([self.hidden_dim], dtype=torch_dtype)
+        parent_h_=[]
+        node_h = init_node_h
         for step in range(num_parents):
             w, x, t = x_word[num_leaves+step], x_index[num_leaves+step], tree[step] 
-            parent_h.append(_recurrence(w,x,t,step,init_node_h, dummy)[1].reshape(1,-1))
-        parent_h = torch.cat(parent_h, dim=0)
+            (updated_node_h, parent_h_i)=_recurrence(w,x,t,step,node_h)
+            parent_h_.append(parent_h_i.reshape(1, -1))
+            node_h = updated_node_h
+        
+        parent_h = torch.cat(parent_h_, dim=0)
 
         return torch.cat([leaf_h, parent_h], dim=0)
 
