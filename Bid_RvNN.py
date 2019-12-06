@@ -221,7 +221,7 @@ class RvNN(object):
                 )
             return h.max(dim=0)[0]
             """
-            h_tilde = torch.sum(child_h, dim=0)
+            h_tilde = torch.mean(child_h, dim=0)
             #parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device))
             z = hard_sigmoid(self.W_z.matmul(parent_xe)+self.U_z.matmul(h_tilde)+self.b_z)
             r = hard_sigmoid(self.W_r.matmul(parent_xe)+self.U_r.matmul(h_tilde)+self.b_r)

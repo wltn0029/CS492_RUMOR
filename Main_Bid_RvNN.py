@@ -13,7 +13,7 @@ import sys
 #sys.setdefaultencoding('utf-8')
 
 import os
-import BU_RvNN
+import Bid_RvNN
 
 import torch
 import torch.nn as nn
@@ -29,7 +29,7 @@ from evaluate import *
 
 obj = "Twitter15" # choose dataset, you can choose either "Twitter15" or "Twitter16"
 fold = "2" # fold index, choose from 0-4
-#tag = "_u2b"
+tag_td = "_u2b"
 # obj = "Twitter15" # choose dataset, you can choose either "Twitter15" or "Twitter16"
 # fold = "3" # fold index, choose from 0-4
 tag = ""
