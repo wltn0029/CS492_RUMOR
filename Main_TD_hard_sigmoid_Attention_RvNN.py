@@ -12,7 +12,7 @@ import sys
 #reload(sys)
 #sys.setdefaultencoding('utf-8')
 
-import TD_RvNN
+import TD_hard_sigmoid_Attention_RvNN as TD_RvNN
 import math
 
 import numpy as np
@@ -135,20 +135,13 @@ def loadData():
     print( "loading train set", )
     tree_train, word_train, index_train, y_train, parent_num_train, c = [], [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
-    i , a, b, d = 0, 0, 0, 0
     for eid in open(trainPath):
         #if c > 8: break
-        i +=1
         eid = eid.rstrip()
-        if labelDic.get(eid) is None: 
-            a+=1
-            continue
-        if treeDic.get(eid) is None: 
-            b+=1
-            continue 
+        if labelDic.get(eid) is None: continue
+        if treeDic.get(eid) is None: continue 
         if len(treeDic[eid]) <= 0: 
            #print labelDic[eid]
-           d+=1
            continue
         ## 1. load label
         label = labelDic[eid]
@@ -166,7 +159,7 @@ def loadData():
         #exit(0)
         c += 1
     print( l1,l2,l3,l4)
-    print(i,a,b,d)
+
     print( "loading test set", )
     tree_test, word_test, index_test, parent_num_test, y_test, c = [], [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
@@ -202,13 +195,12 @@ def loadData():
 
 ##################################### MAIN ####################################        
 ## 1. load tree & word & index & label
-tree_train, word_train, index_train, parent_num_train, y_train, \
-        tree_test, word_test, index_test, parent_num_test, y_test = loadData()
+tree_train, word_train, index_train, parent_num_train, y_train, tree_test, word_test, index_test, parent_num_test, y_test = loadData()
 
 
 ## 1.5. Check device and get device (gpu, cpu)
-#device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-device = 'cpu'
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 ## 2. ini RNN model
 t0 = time.time()
 model = TD_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
@@ -258,7 +250,6 @@ for epoch in range(Nepoch):
         evl = model._evaluate(word_train[i], index_train[i], child_num_train[i], tree_train[i])
         print len(evl) 
         print evl'''
-        # print("tree_train[%d] in main td :", i,tree_train[i])
         loss, pred_y = model.forward(word_train[i], index_train[i], parent_num_train[i], tree_train[i], y_train[i], lr)
         #print loss, pred_y
         losses.append(round(float(loss),2))
@@ -291,10 +282,6 @@ for epoch in range(Nepoch):
             prediction.append(model.predict_up(word_test[j], index_test[j],
                                                parent_num_test[j], tree_test[j]).tolist())
 
-        print(prediction[0])
-        print(y_test[0])
-        print(type(prediction[0]))
-        print(type(y_test[0]))
         res = evaluation_4class(prediction, y_test)
         print('results:', res)
         #floss.write(str(res)+'\n')

@@ -47,10 +47,10 @@ def gen_nn_inputs(root_node, max_degree=None, only_leaves_have_vals=True, with_l
     X_index.extend(internal_index)
     if max_degree is not None:
         assert all(len(t) == max_degree + 1 for t in tree)
-
+    
     return (np.array(X_word, dtype='float64'),
             np.array(X_index, dtype='int32'),
-            np.array(tree, dtype='int32')) 
+            tree)#np.array(tree, dtype='int32')) 
 
 
 def _clear_indices(root_node):
@@ -65,7 +65,7 @@ def _get_leaf_vals(root_node):
     while layer:
         next_layer = []
         for node in layer:
-            if not node.children:
+            if not node.children: # leaf
                 all_leaves.append(node)
             else:
                 next_layer.extend([child for child in node.children[::-1] if child])
@@ -89,8 +89,8 @@ def _get_tree_traversal(root_node, start_idx=0, max_degree=None):
     while layer:
         layers.append(layer[:])
         next_layer = []
-        [next_layer.extend([child for child in node.children if child])
-         for node in layer]
+        for node in layer:
+            next_layer.extend([child for child in node.children if child] )
         layer = next_layer
 
     tree = []
@@ -103,19 +103,20 @@ def _get_tree_traversal(root_node, start_idx=0, max_degree=None):
                 # must be leaf
                 assert all(child is None for child in node.children)
                 continue
-
-            child_idxs = [(child.idx if child else -1)
-                          for child in node.children]  ## idx of child node
+            child_idxs = [child.idx 
+                          for child in node.children if child ]  ## idx of child node
             if max_degree is not None:
-                child_idxs.extend([-1] * (max_degree - len(child_idxs)))
+               child_idxs.extend([-1] * (max_degree - len(child_idxs)))
             assert not any(idx is None for idx in child_idxs)
 
             node.idx = idx
+            #print("chil",child_idxs)
             tree.append(child_idxs + [node.idx])
             internal_word.append(node.word if node.word is not None else -1)
             internal_index.append(node.index if node.index is not None else -1)
             idx += 1
-
+    # print("tree",tree)
+    # exit()
     return tree, internal_word, internal_index
 
 
@@ -164,16 +165,16 @@ class RvNN(object):
         self.leaf_unit = self.create_leaf_unit()
         
         
-    def forward(self, x_word, x_index, tree, y, lr):
-        final_state = self.compute_tree(x_word, x_index, tree)
+    def forward(self, x_word, x_index, num_parent, tree, y, lr):
+        final_state = self.compute_tree(x_word, x_index, num_parent, tree)
         #final_state = tree_states[-1]
         pred_y = self.output_fn(final_state)
         loss = self.loss_fn(y, pred_y)
         self.gradient_descent(loss, lr)
         return loss, pred_y.tolist()
     
-    def predict_up(self,x_word, x_index, tree):
-        final_state = self.compute_tree(x_word, x_index, tree)
+    def predict_up(self,x_word, x_index, num_parent, tree):
+        final_state = self.compute_tree(x_word, x_index, num_parent, tree)
         pred_y = self.output_fn(final_state)
         return pred_y.tolist()
 
@@ -206,21 +207,6 @@ class RvNN(object):
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
         def unit(parent_word, parent_index, child_h):
             parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device, dtype=torch_dtype))
-            """
-            def pc_pairs(h_tilde):
-                z_bu = F.sigmoid(self.W_z.matmul(parent_xe) + self.U_z.matmul(h_tilde) + self.b_z)
-                r_bu = F.sigmoid(self.W_r.matmul(parent_xe) + self.U_r.matmul(h_tilde) + self.b_r)
-                c = F.tanh(self.W_h.mul(parent_xe).sum(dim=1) + self.U_h.mul(h_tilde * r_bu).sum(dim=1) + self.b_h)
-                h_bu = z_bu * h_tilde + (1 - z_bu) * c
-                return h_bu
-            if child_h.size(0) == 1:
-                h = pc_pairs(child_h[0].type(torch_dtype)).unsqueeze(0)
-            else:
-                h = torch.tensor(
-                    list(map(lambda x: pc_pairs(x).tolist(), child_h)), device=self.device
-                )
-            return h.max(dim=0)[0]
-            """
             h_tilde = torch.sum(child_h, dim=0)
             #parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device))
             z = hard_sigmoid(self.W_z.matmul(parent_xe)+self.U_z.matmul(h_tilde)+self.b_z)
@@ -237,10 +223,11 @@ class RvNN(object):
             return self.recursive_unit( leaf_word, leaf_index, dummy)
         return unit
 
-    def compute_tree(self, x_word, x_index, tree):
+    def compute_tree(self, x_word, x_index, num_parents, tree):
         num_nodes = x_word.shape[0]
-        num_parents = tree.shape[0]  # num internal nodes
-        num_leaves = num_nodes - num_parents
+        if num_nodes == 1:  
+            return self.leaf_unit(x_word[0], x_index[0]) 
+        num_leaves = num_nodes - num_parents+1
 
         # compute leaf hidden states
         leaf_h= torch.stack([self.leaf_unit(w, i) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])], dim=0)
@@ -250,22 +237,22 @@ class RvNN(object):
         def _recurrence(x_word, x_index, tree, idx, node_h):
             #node_h means node's hidden state (start from only leaf and their upper node are added)
             # tree size is num_leaves
-            child_exists = (tree[:-1] > -1).nonzero()
+            child_exists = tree[:-1]#(tree[:-1] > -1).nonzero()
             # maybe child_h means (tree>-1)th nodes are children of parent(x_word, x_index)
-            child_h = node_h[tree[child_exists]] 
+            child_h = node_h[child_exists] 
             # pass all children of one parent to parent node as hidden state
             parent_h = self.recursive_unit(x_word, x_index, child_h) # parent node's hidden state
             node_h = torch.cat((node_h, parent_h.view(1, -1)), 0) # add parent node to input
             return node_h, parent_h
         
         node_h = init_node_h # only leaf nodes
+        #print(node_h.shape)
         # for num_parent step running 
         for idx, (w, x, t) in enumerate(zip(x_word[num_leaves:], x_index[num_leaves:], tree)):
             #node_h means node's hidden state (start from only leaf and their upper node are added)
-            node_h, parent_h=_recurrence(w, x, t, idx, node_h)
             #print(t)
-        #exit()
-
+            node_h, parent_h=_recurrence(w, x, t, idx, node_h)
+            
         return parent_h
 
     def loss_fn(self, y, pred_y):

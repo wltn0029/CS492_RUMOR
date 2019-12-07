@@ -59,12 +59,9 @@ class RvNN(object):
         self.bu_recursive_unit = self.create_bu_recursive_unit()
         self.leaf_unit = self.create_leaf_unit()
         
-
     def forward(self, x_word, x_index, num_parent, tree,y,lr):
         td_final_state = self.td_compute_tree(x_word[0], x_index[0], num_parent, tree[0])
-        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], tree[1])
-        #print(td_final_state.shape,bu_final_state.shape)
-
+        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], num_parent, tree[1])
         final_state = torch.cat((td_final_state, bu_final_state), dim=0)
         pred_y = self.output_fn(final_state)
         loss = self.loss_fn(y, pred_y)
@@ -76,7 +73,7 @@ class RvNN(object):
         # similar to forward function.
         # except loss, gradient part.\
         td_final_state = self.td_compute_tree(x_word[0], x_index[0], num_parent, tree[0])
-        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], tree[1])
+        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], num_parent, tree[1])
         final_state = torch.cat((td_final_state, bu_final_state), dim=0)
         pred_y = self.output_fn(final_state)
         return pred_y.tolist()
@@ -198,10 +195,11 @@ class RvNN(object):
             return h_bu
         return unit
 
-    def bu_compute_tree(self, x_word, x_index, tree):
+    def bu_compute_tree(self, x_word, x_index, num_parents, tree):
         num_nodes = x_word.shape[0]
-        num_parents = tree.shape[0]  # num internal nodes
-        num_leaves = num_nodes - num_parents
+        if num_nodes == 1:  
+            return self.leaf_unit(x_word[0], x_index[0]) 
+        num_leaves = num_nodes - num_parents+1
 
         # compute leaf hidden states
         leaf_h= torch.stack([self.leaf_unit(w, i) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])], dim=0)
@@ -211,9 +209,9 @@ class RvNN(object):
         def _recurrence(x_word, x_index, tree, idx, node_h):
             #node_h means node's hidden state (start from only leaf and their upper node are added)
             # tree size is num_leaves
-            child_exists = (tree[:-1] > -1).nonzero()
+            child_exists = tree[:-1]
             # maybe child_h means (tree>-1)th nodes are children of parent(x_word, x_index)
-            child_h = node_h[tree[child_exists]] 
+            child_h = node_h[child_exists] 
             # pass all children of one parent to parent node as hidden state
             parent_h = self.bu_recursive_unit(x_word, x_index, child_h) # parent node's hidden state
             node_h = torch.cat((node_h, parent_h.view(1, -1)), 0) # add parent node to input
