@@ -1,4 +1,4 @@
-__doc__ = """Tree GRU aka Recursive Neural Networks."""
+"""Tree GRU aka Recursive Neural Networks."""
 
 import numpy as np
 #import theano
@@ -109,13 +109,16 @@ class RvNN(object):
         self.device=device
         self.params = []
 
-        self.output_fn = self.create_output_fn()
+        self.attention_fn, self.output_fn = self.create_output_fn()
         self.recursive_unit = self.create_recursive_unit()
 
     def forward(self, x_word, x_index, num_parent, tree,y,lr) :
+        pred_y = self.predict_up(x_word, x_index, num_parent, tree)
+        '''
         tree_states = self.compute_tree(x_word, x_index, num_parent, tree)
-        final_state = torch.max(tree_states, dim=0).values
+        final_state = self.attention_fn(tree_states)
         pred_y = self.output_fn(final_state)
+        '''
         loss = self.loss_fn(y, pred_y)
         self.gradient_descent(loss, lr)
 
@@ -125,7 +128,7 @@ class RvNN(object):
        # similar to forward function.
        # except loss, gradient part.
         tree_states = self.compute_tree(x_word, x_index, num_parent, tree)
-        final_state = torch.max(tree_states, dim=0).values
+        final_state = self.attention_fn(tree_states)
         pred_y = self.output_fn(final_state)
         return pred_y
 
@@ -140,10 +143,28 @@ class RvNN(object):
         self.b_out = torch.tensor(self.init_vector([self.Nclass]),requires_grad = True, device=self.device)
         self.params.extend([self.W_out, self.b_out])
 
+        # TODO: Attention added.
+
+        self.W_attention = torch.tensor(self.init_matrix([self.hidden_dim, 1]), requires_grad = True, device=self.device)
+        self.b_attention = torch.tensor(self.init_vector([1]),requires_grad = True, device=self.device)
+        self.params.extend([self.W_attention, self.b_attention])
+        # self.params.extend([self.W_attention]) #, self.b_attention])
+
+        def attention_fn(tree_states):
+            # attention = torch.matmul(tree_states, self.W_attention) + self.b_attention
+            attention = F.softmax(torch.matmul(tree_states, self.W_attention) + self.b_attention, dim=0)
+            # attention = F.softmax(torch.matmul(tree_states, self.W_attention), dim=0) * tree_states.shape[0]
+
+            return torch.matmul(F.relu(tree_states).T, attention)
+
+        """
+        def attention_fn(tree_states):
+            return torch.mean(tree_states, dim=0)
+            # return torch.max(tree_states, dim=0).values
+        """
         def fn(final_state):
-            return F.softmax(torch.matmul(self.W_out, final_state)+
-                             self.b_out)
-        return fn
+            return F.softmax(torch.matmul(self.W_out, final_state).reshape(-1) + self.b_out, dim=0)
+        return attention_fn, fn
 
 
     def create_recursive_unit(self):
@@ -187,16 +208,17 @@ class RvNN(object):
                                     node_h[node_info[1]+1:]])
             return node_h, child_h
 
+        # dummy = torch.tensor(self.init_vector([self.hidden_dim]), requires_grad = True, device=self.device)
+
+
         child_hs = []
         node_h = init_node_h
         for x_word_i, x_index_i, tree_i in zip(x_word[:-1], x_index, tree) :
-            #print(tree_i)
             (updated_node_h, child_hs_i)=_recurrence(x_word_i, x_index_i, tree_i, node_h)
             child_hs.append(child_hs_i.reshape(1, -1))
             node_h = updated_node_h
-        #exit()
         return torch.cat(child_hs[num_parent-1:], 0)
-    """
+
     def compute_tree_test(self, x_word, x_index, tree):
         self.recursive_unit = self.create_recursive_unit()
         def ini_unit(x):
@@ -219,7 +241,7 @@ class RvNN(object):
             outputs_info=[init_node_h, dummy],
             sequences=[x_word[:-1], x_index, tree])
         return child_hs
-    """
+
     def loss_fn(self, y, pred_y):
 
         return torch.sum((torch.tensor(y, device=self.device) - pred_y).pow(2))

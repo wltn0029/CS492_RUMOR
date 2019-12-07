@@ -14,6 +14,8 @@ import sys
 
 import os
 import Bid_RvNN
+import TD_RvNN
+import BU_RvNN
 
 import torch
 import torch.nn as nn
@@ -29,25 +31,21 @@ from evaluate import *
 
 obj = "Twitter15" # choose dataset, you can choose either "Twitter15" or "Twitter16"
 fold = "2" # fold index, choose from 0-4
-tag_td = "_u2b"
-# obj = "Twitter15" # choose dataset, you can choose either "Twitter15" or "Twitter16"
-# fold = "3" # fold index, choose from 0-4
-tag = ""
+tag = "_u2b"
 vocabulary_size = 5000
 hidden_dim = 100
 Nclass = 4
-Nepoch = 400
+Nepoch = 500
 lr = 0.005
 
-unit="BU_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag
-#lossPath = "../loss/loss-"+unit+".txt"
-#modelPath = "../param/param-"+unit+".npz" 
-
-treePath = '../resource/data.BU_RvNN.vol_'+str(vocabulary_size)+tag+'.txt' 
+treePath_td = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+treePath_bu = '../resource/data.BU_RvNN.vol_'+str(vocabulary_size)+'.txt' 
 
 trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
 testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
 labelPath = "../resource/"+obj+"_label_All.txt"
+
+
 
 #floss = open(lossPath, 'a+')
 
@@ -82,12 +80,15 @@ def loadLabel(label, l1, l2, l3, l4):
        l4 += 1
     return y_train, l1,l2,l3,l4
 
-def constructTree(tree):
+def constructTree(tree, tree_type):
     ## tree: {index1:{'parent':, 'maxL':, 'vec':}
     ## 1. ini tree node
     index2node = {}
     for i in tree:
-        node = BU_RvNN.Node_tweet(idx=i)
+        if tree_type == 0:
+            node = TD_RvNN.Node_tweet(idx=i)
+        else :
+            node = BU_RvNN.Node_tweet(idx=i)
         index2node[i] = node
     ## 2. construct tree
     for j in tree:
@@ -98,6 +99,7 @@ def constructTree(tree):
         #print tree[j]['maxL']
         nodeC.index = wordIndex
         nodeC.word = wordFreq
+        #nodeC.time = tree[j]['post_t']
         ## not root node ## 
         if not indexP == 'None':
            nodeP = index2node[int(indexP)]
@@ -107,103 +109,133 @@ def constructTree(tree):
         else:
            root = nodeC
     ## 3. convert tree to DNN input    
-    degree = tree[j]['max_degree']   
-    x_word, x_index, tree = BU_RvNN.gen_nn_inputs(root, max_degree=degree, only_leaves_have_vals=False)    
-    return x_word, x_index, tree       
-               
+    parent_num = tree[j]['parent_num'] 
+    ini_x, ini_index = str2matrix( "0:0", tree[j]['maxL'] )
+    #x_word, x_index, tree = tree_gru_u2b.gen_nn_inputs(root, ini_x, ini_index) 
+    if tree_type ==0:
+        x_word, x_index, tree = TD_RvNN.gen_nn_inputs(root, ini_x) 
+    else:
+        degree = tree[j]['parent_num']   
+        x_word, x_index, tree = BU_RvNN.gen_nn_inputs(root, \
+            max_degree=degree, only_leaves_have_vals=False) 
+    return x_word, x_index, tree, parent_num
+
 ################################# loas data ###################################
 def loadData():
-    print( "loading tree label",)
+    print ("loading tree label"),
     labelDic = {}
     for line in open(labelPath):
         line = line.rstrip()
         label, eid = line.split('\t')[0], line.split('\t')[2]
         labelDic[eid] = label.lower()   
-    print(len(labelDic))
-    
-    print( "reading tree", )
+    print( len(labelDic))
+
+    print( "reading tree", )## X
     treeDic = {}
-    for line in open(treePath):
-        line = line.rstrip()
-        eid, indexP, indexC = line.split('\t')[0], line.split('\t')[1], int(line.split('\t')[2])
-        max_degree, maxL, Vec = int(line.split('\t')[3]), int(line.split('\t')[4]), line.split('\t')[5]       
-        if not treeDic.get(eid):
-           treeDic[eid] = {}
-        treeDic[eid][indexC] = {'parent':indexP, 'max_degree':max_degree, 'maxL':maxL, 'vec':Vec}   
-    print( 'tree no:', len(treeDic))
     
+    for line_td, line_bu in zip(open(treePath_td),open(treePath_bu)):
+        line_td, line_bu = line_td.rstrip(), line_bu.rstrip()
+        for i, line in enumerate([line_td,line_bu]):
+            eid, indexP, indexC = line.split('\t')[0], line.split('\t')[1], int(line.split('\t')[2])
+            parent_num, maxL = int(line.split('\t')[3]), int(line.split('\t')[4])  
+            Vec =  line.split('\t')[5] 
+            if treeDic.get(eid) is None:
+                treeDic[eid] = [{},{}]
+            treeDic[eid][i][indexC] = {'parent':indexP, 'parent_num':parent_num, 'maxL':maxL, 'vec':Vec}   
+
+    print( 'tree no:', len(treeDic))
+    # for i,(eid, data) in enumerate(treeDic.items()):
+    #     i += 1
+    #     print('--------------------')
+    #     print(eid)
+    #     print(data[0][1]['parent_num'],len(data[0]))
+    #     if i >= 10:
+    #         break
     print( "loading train set", )
-    tree_train, word_train, index_train, y_train, c = [], [], [], [], 0
+    tree_train, word_train, index_train, y_train, parent_num_train, c = [], [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
     for eid in open(trainPath):
         #if c > 8: break
         eid = eid.rstrip()
-        if not labelDic.get(eid): continue
-        if not treeDic.get(eid): continue 
-        if len(treeDic[eid]) < 2: continue
+        if labelDic.get(eid) is None: continue
+        if treeDic.get(eid) is None: continue 
+        if len(treeDic[eid][0]) <= 0: 
+           #print labelDic[eid]
+           continue
+        ## 20191207 added. for bu tree.
+        if len(treeDic[eid][0]) < 2:
+            continue
         ## 1. load label
         label = labelDic[eid]
         y, l1,l2,l3,l4 = loadLabel(label, l1, l2, l3, l4)
         y_train.append(y)
         ## 2. construct tree
         #print eid
-        x_word, x_index, tree = constructTree(treeDic[eid])
-        tree_train.append(tree)
-        word_train.append(x_word)
-        index_train.append(x_index)
+        x_word_td, x_index_td, tree_td, parent_num = constructTree(treeDic[eid][0], 0)
+        x_word_bu, x_index_bu, tree_bu, _ = constructTree(treeDic[eid][1], 1)
+        tree_train.append([tree_td,tree_bu])
+        word_train.append([x_word_td,x_word_bu])
+        index_train.append([x_index_td, x_index_bu])
+        parent_num_train.append(parent_num)
+        #print treeDic[eid]
+        #print tree, child_num
+        #exit(0)
         c += 1
     print( l1,l2,l3,l4)
-    
+
     print( "loading test set", )
-    tree_test,  word_test, index_test, y_test, c = [], [], [], [], 0
+    tree_test, word_test, index_test, parent_num_test, y_test, c = [], [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
     for eid in open(testPath):
         #if c > 4: break
         eid = eid.rstrip()
-        if not labelDic.get(eid): continue
-        if not treeDic.get(eid): continue 
-        if len(treeDic[eid]) < 2: continue        
+        if labelDic.get(eid) is None: continue
+        if treeDic.get(eid) is None: continue
+        if len(treeDic[eid]) <= 0: 
+            #print labelDic[eid] 
+            continue
+        ## 20191207 added. for bu tree.
+        if len(treeDic[eid][0]) < 2:
+            continue
         ## 1. load label        
         label = labelDic[eid]
         y, l1,l2,l3,l4 = loadLabel(label, l1, l2, l3, l4)
         y_test.append(y)
         ## 2. construct tree
-        x_word, x_index, tree = constructTree(treeDic[eid])
-        tree_test.append(tree)
-        word_test.append(x_word)  
-        index_test.append(x_index)  
+        x_word_td, x_index_td, tree_td, parent_num = constructTree(treeDic[eid][0], 0)
+        x_word_bu, x_index_bu, tree_bu, _ = constructTree(treeDic[eid][1], 1)
+        tree_test.append([tree_td,tree_bu])
+        word_test.append([x_word_td,x_word_bu])
+        index_test.append([x_index_td, x_index_bu])
+        parent_num_test.append(parent_num)
         c += 1
-    print(l1,l2,l3,l4)
-    print( "train no:", len(tree_train), len(word_train), len(index_train),len(y_train) )
-    print( "test no:", len(tree_test), len(word_test), len(index_test), len(y_test))
-    print( "dim1 for 0:", len(tree_train[0]), len(word_train[0]), len(index_train[0]))
-    print( "case 0:", tree_train[0][0], word_train[0][0], index_train[0][0])
+    print( l1,l2,l3,l4)
+    print( "train no:", len(tree_train), len(word_train), len(index_train),len(parent_num_train), len(y_train))
+    print( "test no:", len(tree_test), len(word_test), len(index_test), len(parent_num_test), len(y_test))
+    print("dim1 for 0:", len(tree_train[0][0]), len(word_train[0][0]), len(index_train[0][0]))
+    #print("case 0:", tree_train[0][0], word_train[0][0], index_train[0][0], parent_num_train[0])
+    #print index_train[0]
+    #print word_train[0]
+    #print tree_train[0]    
     #exit(0)
-    return tree_train, word_train, index_train, y_train, tree_test, word_test, index_test, y_test
+    return tree_train, word_train, index_train, parent_num_train, y_train, tree_test, word_test, index_test, parent_num_test, y_test
 
 ##################################### MAIN ####################################        
 ## 1. load tree & word & index & label
-tree_train, word_train, index_train, y_train, tree_test, word_test, index_test, y_test = loadData()
+tree_train, word_train, index_train, parent_num_train, y_train, tree_test, \
+                word_test, index_test, parent_num_test, y_test = loadData()
 
 ## 1.5. Check device and get device (gpu, cpu)
 device='cpu'
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 ## 2. ini RNN model
 t0 = time.time()
-model = BU_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
+model = Bid_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
 t1 = time.time()
 print('Recursive model established,', (t1-t0)/60)
 
-#if os.path.isfile(modelPath):
-#   load_model_Recursive_gruEmb(modelPath, model) 
-######debug here######
-#print len(tree_test[121]), len(index_test[121]), len(word_test[121])
-#print tree_test[121]
-#exit(0)
-#loss, pred_y = model.train_step_up(word_test[121], index_test[121], tree_test[121], y_test[121], lr)
-#print loss, pred_y
-#exit(0)
+
 ######################
 
 ## 3. looping SGD
@@ -215,7 +247,9 @@ for epoch in range(Nepoch):
     random.shuffle(indexs) 
     for i in indexs:
         #print i,
-        loss, pred_y = model.forward(word_train[i], index_train[i], tree_train[i], y_train[i], lr)
+        #print(parent_num_train)
+
+        loss, pred_y = model.forward(word_train[i], index_train[i], parent_num_train[i], tree_train[i], y_train[i], lr)
         #print loss, pred_y
         losses.append(float(loss))
         num_examples_seen += 1
@@ -234,7 +268,7 @@ for epoch in range(Nepoch):
        prediction = []
        for j in range(len(y_test)):
            #print j
-           prediction.append(model.predict_up(word_test[j], index_test[j], tree_test[j]) )   
+           prediction.append(model.predict_up(word_test[j], index_test[j], parent_num_test[j], tree_test[j]) )   
        res = evaluation_4class(prediction, y_test) 
        print( 'results:', res)
        #floss.write(str(res)+'\n')

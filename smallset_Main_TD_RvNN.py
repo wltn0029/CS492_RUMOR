@@ -12,12 +12,12 @@ import sys
 #reload(sys)
 #sys.setdefaultencoding('utf-8')
 
-import TD_RvNN
+import smallset_TD_RvNN as TD_RvNN
 import math
 
 import numpy as np
 from numpy.testing import assert_array_almost_equal
-
+from Main_Bid_RvNN import loadData, constructTree
 import time
 import datetime
 import random
@@ -37,7 +37,8 @@ unit="TD_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag
 #lossPath = "../loss/loss-"+unit+".txt"
 #modelPath = "../param/param-"+unit+".npz" 
 
-treePath = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+treePath_td = '../resource/data.TD_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+treePath_bu = '../resource/data.BU_RvNN.vol_'+str(vocabulary_size)+'.txt' 
 
 trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
 testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
@@ -109,7 +110,6 @@ def constructTree(tree):
     #x_word, x_index, tree = tree_gru_u2b.gen_nn_inputs(root, ini_x, ini_index) 
     x_word, x_index, tree = TD_RvNN.gen_nn_inputs(root, ini_x) 
     return x_word, x_index, tree, parent_num
-
 ################################# loas data ###################################
 def loadData():
     print ("loading tree label"),
@@ -122,13 +122,13 @@ def loadData():
 
     print( "reading tree", )## X
     treeDic = {}
-    for line in open(treePath):
-        line = line.rstrip()
+    for line, _ in zip(open(treePath_td), open(treePath_bu)):
+        line_td, = line.rstrip()
         eid, indexP, indexC = line.split('\t')[0], line.split('\t')[1], int(line.split('\t')[2])
         parent_num, maxL = int(line.split('\t')[3]), int(line.split('\t')[4])  
-        Vec =  line.split('\t')[5] 
+        Vec =  line.split('\t')[5]
         if treeDic.get(eid) is None:
-           treeDic[eid] = {}
+            treeDic[eid] = {}
         treeDic[eid][indexC] = {'parent':indexP, 'parent_num':parent_num, 'maxL':maxL, 'vec':Vec}   
     print( 'tree no:', len(treeDic))
 
@@ -150,6 +150,8 @@ def loadData():
            #print labelDic[eid]
            d+=1
            continue
+        if len(treeDic[eid][0]) < 2:
+            continue
         ## 1. load label
         label = labelDic[eid]
         y, l1,l2,l3,l4 = loadLabel(label, l1, l2, l3, l4)
@@ -199,11 +201,9 @@ def loadData():
     #print tree_train[0]    
     #exit(0)
     return tree_train, word_train, index_train, parent_num_train, y_train, tree_test, word_test, index_test, parent_num_test, y_test
-
 ##################################### MAIN ####################################        
 ## 1. load tree & word & index & label
-tree_train, word_train, index_train, parent_num_train, y_train, \
-        tree_test, word_test, index_test, parent_num_test, y_test = loadData()
+tree_train, word_train, index_train, parent_num_train, y_train, tree_test, word_test, index_test, parent_num_test, y_test = loadData()
 
 
 ## 1.5. Check device and get device (gpu, cpu)

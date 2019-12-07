@@ -13,7 +13,7 @@ import sys
 #sys.setdefaultencoding('utf-8')
 
 import os
-import BU_RvNN
+import BU_RvNN_max
 
 import torch
 import torch.nn as nn
@@ -43,7 +43,7 @@ unit="BU_RvNN-"+obj+str(fold)+'-vol.'+str(vocabulary_size)+tag
 #lossPath = "../loss/loss-"+unit+".txt"
 #modelPath = "../param/param-"+unit+".npz" 
 
-treePath = '../resource/data.BU_RvNN.vol_'+str(vocabulary_size)+'.txt' 
+treePath = '../resource/data.BU_RvNN.vol_'+str(vocabulary_size)+tag+'.txt' 
 
 trainPath = "../nfold/RNNtrainSet_"+obj+str(fold)+"_tree.txt" 
 testPath = "../nfold/RNNtestSet_"+obj+str(fold)+"_tree.txt"
@@ -87,7 +87,7 @@ def constructTree(tree):
     ## 1. ini tree node
     index2node = {}
     for i in tree:
-        node = BU_RvNN.Node_tweet(idx=i)
+        node = BU_RvNN_max.Node_tweet(idx=i)
         index2node[i] = node
     ## 2. construct tree
     for j in tree:
@@ -108,7 +108,7 @@ def constructTree(tree):
            root = nodeC
     ## 3. convert tree to DNN input    
     degree = tree[j]['max_degree']   
-    x_word, x_index, tree = BU_RvNN.gen_nn_inputs(root, max_degree=degree, only_leaves_have_vals=False)    
+    x_word, x_index, tree = BU_RvNN_max.gen_nn_inputs(root, max_degree=degree, only_leaves_have_vals=False)    
     return x_word, x_index, tree       
                
 ################################# loas data ###################################
@@ -135,20 +135,12 @@ def loadData():
     print( "loading train set", )
     tree_train, word_train, index_train, y_train, c = [], [], [], [], 0
     l1,l2,l3,l4 = 0,0,0,0
-    i, a, b, d = 0, 0,0, 0
-    
     for eid in open(trainPath):
+        #if c > 8: break
         eid = eid.rstrip()
-        i+=1
-        if not labelDic.get(eid): 
-            a+=1
-            continue
-        if treeDic.get(eid) is None: 
-            b+=1
-            continue 
-        if len(treeDic[eid]) < 2: 
-            d+=1
-            continue
+        if not labelDic.get(eid): continue
+        if not treeDic.get(eid): continue 
+        if len(treeDic[eid]) < 2: continue
         ## 1. load label
         label = labelDic[eid]
         y, l1,l2,l3,l4 = loadLabel(label, l1, l2, l3, l4)
@@ -160,7 +152,6 @@ def loadData():
         word_train.append(x_word)
         index_train.append(x_index)
         c += 1
-    print(i, a, b, d)
     print( l1,l2,l3,l4)
     
     print( "loading test set", )
@@ -196,11 +187,11 @@ tree_train, word_train, index_train, y_train, tree_test, word_test, index_test, 
 
 ## 1.5. Check device and get device (gpu, cpu)
 device='cpu'
-#device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 ## 2. ini RNN model
 t0 = time.time()
-model = BU_RvNN.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
+model = BU_RvNN_max.RvNN(vocabulary_size, hidden_dim, Nclass, device=device)
 t1 = time.time()
 print('Recursive model established,', (t1-t0)/60)
 

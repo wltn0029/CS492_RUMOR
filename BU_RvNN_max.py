@@ -206,22 +206,8 @@ class RvNN(object):
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
         def unit(parent_word, parent_index, child_h):
             parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device, dtype=torch_dtype))
-            """
-            def pc_pairs(h_tilde):
-                z_bu = F.sigmoid(self.W_z.matmul(parent_xe) + self.U_z.matmul(h_tilde) + self.b_z)
-                r_bu = F.sigmoid(self.W_r.matmul(parent_xe) + self.U_r.matmul(h_tilde) + self.b_r)
-                c = F.tanh(self.W_h.mul(parent_xe).sum(dim=1) + self.U_h.mul(h_tilde * r_bu).sum(dim=1) + self.b_h)
-                h_bu = z_bu * h_tilde + (1 - z_bu) * c
-                return h_bu
-            if child_h.size(0) == 1:
-                h = pc_pairs(child_h[0].type(torch_dtype)).unsqueeze(0)
-            else:
-                h = torch.tensor(
-                    list(map(lambda x: pc_pairs(x).tolist(), child_h)), device=self.device
-                )
-            return h.max(dim=0)[0]
-            """
-            h_tilde = torch.sum(child_h, dim=0)
+
+            h_tilde = torch.max(child_h, dim=0).values
             #parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device))
             z = hard_sigmoid(self.W_z.matmul(parent_xe)+self.U_z.matmul(h_tilde)+self.b_z)
             r = hard_sigmoid(self.W_r.matmul(parent_xe)+self.U_r.matmul(h_tilde)+self.b_r)

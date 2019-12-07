@@ -164,8 +164,8 @@ class RvNN(object):
         self.leaf_unit = self.create_leaf_unit()
         
         
-    def forward(self, x_word, x_index, tree, y, lr):
-        final_state = self.compute_tree(x_word, x_index, tree)
+    def forward(self, x_word, x_index, num_parent, tree, y, lr):
+        final_state = self.compute_tree(x_word, x_index, num_parent, tree)
         #final_state = tree_states[-1]
         pred_y = self.output_fn(final_state)
         loss = self.loss_fn(y, pred_y)
@@ -173,7 +173,7 @@ class RvNN(object):
         return loss, pred_y.tolist()
     
     def predict_up(self,x_word, x_index, tree):
-        final_state = self.compute_tree(x_word, x_index, tree)
+        final_state = self.compute_tree(x_word, x_index, num_parent, tree)
         pred_y = self.output_fn(final_state)
         return pred_y.tolist()
 
@@ -206,21 +206,6 @@ class RvNN(object):
         self.params.extend([self.E, self.W_z, self.U_z, self.b_z, self.W_r, self.U_r, self.b_r, self.W_h, self.U_h, self.b_h])
         def unit(parent_word, parent_index, child_h):
             parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device, dtype=torch_dtype))
-            """
-            def pc_pairs(h_tilde):
-                z_bu = F.sigmoid(self.W_z.matmul(parent_xe) + self.U_z.matmul(h_tilde) + self.b_z)
-                r_bu = F.sigmoid(self.W_r.matmul(parent_xe) + self.U_r.matmul(h_tilde) + self.b_r)
-                c = F.tanh(self.W_h.mul(parent_xe).sum(dim=1) + self.U_h.mul(h_tilde * r_bu).sum(dim=1) + self.b_h)
-                h_bu = z_bu * h_tilde + (1 - z_bu) * c
-                return h_bu
-            if child_h.size(0) == 1:
-                h = pc_pairs(child_h[0].type(torch_dtype)).unsqueeze(0)
-            else:
-                h = torch.tensor(
-                    list(map(lambda x: pc_pairs(x).tolist(), child_h)), device=self.device
-                )
-            return h.max(dim=0)[0]
-            """
             h_tilde = torch.sum(child_h, dim=0)
             #parent_xe = self.E[:,parent_index].matmul(torch.tensor(parent_word, device=self.device))
             z = hard_sigmoid(self.W_z.matmul(parent_xe)+self.U_z.matmul(h_tilde)+self.b_z)
@@ -237,17 +222,21 @@ class RvNN(object):
             return self.recursive_unit( leaf_word, leaf_index, dummy)
         return unit
 
-    def compute_tree(self, x_word, x_index, tree):
+    def compute_tree(self, x_word, x_index, num_parents, tree):
         num_nodes = x_word.shape[0]
-        num_parents = tree.shape[0]  # num internal nodes
+#        num_parents = tree.shape[0]  # num internal nodes
         num_leaves = num_nodes - num_parents
 
         # compute leaf hidden states
-        leaf_h= torch.stack([self.leaf_unit(w, i) for w, i in zip(x_word[:num_leaves], x_index[:num_leaves])], dim=0)
-        init_node_h = leaf_h
+        #node_h = torch.tensor(self.init_matrix([num_nodes, self.hidden_dim]), device=self.device)
+        # for step in range(num_parents,num_nodes):
+            # node_h[step] = self.leaf_unit(x_word[step],  x_index[step]) 
+        index_h = list(range(num_parents,num_nodes))
+        node_h= torch.stack([self.leaf_unit(w, i) for w, i in zip(x_word[num_parents:], x_index[num_parents:])], dim=0)
+        #init_node_h = leaf_h
 
         # use recurrence to compute internal node hidden states
-        def _recurrence(x_word, x_index, tree, idx, node_h):
+        def _recurrence(x_word, x_index, tree, node_h):
             #node_h means node's hidden state (start from only leaf and their upper node are added)
             # tree size is num_leaves
             child_exists = (tree[:-1] > -1).nonzero()
@@ -258,11 +247,11 @@ class RvNN(object):
             node_h = torch.cat((node_h, parent_h.view(1, -1)), 0) # add parent node to input
             return node_h, parent_h
         
-        node_h = init_node_h # only leaf nodes
+        #node_h = init_node_h # only leaf nodes
         # for num_parent step running 
-        for idx, (w, x, t) in enumerate(zip(x_word[num_leaves:], x_index[num_leaves:], tree)):
+        for w, x, t in zip(x_word[:num_parents], x_index[:num_parents], tree):
             #node_h means node's hidden state (start from only leaf and their upper node are added)
-            node_h, parent_h=_recurrence(w, x, t, idx, node_h)
+            node_h, parent_h=_recurrence(w, x, t,node_h)
             #print(t)
         #exit()
 
