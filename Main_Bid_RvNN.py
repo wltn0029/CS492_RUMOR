@@ -215,8 +215,8 @@ tree_train, word_train, index_train, parent_num_train, y_train, tree_test, \
                 word_test, index_test, parent_num_test, y_test = loadData()
 
 ## 1.5. Check device and get device (gpu, cpu)
-device='cpu'
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device='cpu'
 print(device)
 ## 2. ini RNN model
 t0 = time.time()

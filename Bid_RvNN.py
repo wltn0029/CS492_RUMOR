@@ -60,8 +60,9 @@ class RvNN(object):
         self.leaf_unit = self.create_leaf_unit()
         
     def forward(self, x_word, x_index, num_parent, tree,y,lr):
-        td_final_state = self.td_compute_tree(x_word[0], x_index[0], num_parent, tree[0])
-        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], num_parent, tree[1])
+        td_final_state = self.td_compute_tree(x_word[0], x_index[0], num_parent, tree[0]).type(torch_dtype)
+        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], num_parent, tree[1]).type(torch_dtype)
+        #print(td_final_state.dtype, bu_final_state.dtype)
         final_state = torch.cat((td_final_state, bu_final_state), dim=0)
         pred_y = self.output_fn(final_state)
         loss = self.loss_fn(y, pred_y)
@@ -72,8 +73,8 @@ class RvNN(object):
     def predict_up(self, x_word, x_index, num_parent, tree):
         # similar to forward function.
         # except loss, gradient part.\
-        td_final_state = self.td_compute_tree(x_word[0], x_index[0], num_parent, tree[0])
-        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], num_parent, tree[1])
+        td_final_state = self.td_compute_tree(x_word[0], x_index[0], num_parent, tree[0]).type(torch_dtype)
+        bu_final_state = self.bu_compute_tree(x_word[1], x_index[1], num_parent, tree[1]).type(torch_dtype)
         final_state = torch.cat((td_final_state, bu_final_state), dim=0)
         pred_y = self.output_fn(final_state)
         return pred_y.tolist()
@@ -136,35 +137,7 @@ class RvNN(object):
             node_h, child_hs_i =_recurrence(x_word_i, x_index_i, tree_i, node_h)
             child_hs.append(child_hs_i.reshape(1, -1))
         return torch.cat(child_hs[num_parent-1:], dim=0).max(dim=0).values
-    """
-    def td_compute_tree(self, x_word, x_index, num_parent, tree):
-        print(num_parent)
-        num_nodes = x_word.shape[0]
-        node_h = torch.tensor(self.init_vector([num_nodes, self.hidden_dim]), requires_grad = True, device=self.device)
-
-        # use recurrence to compute internal node hidden states
-        def _recurrence(x_word, x_index, node_info, node_h):
-            parent_h = node_h[node_info[0]]
-            child_h = self.td_recursive_unit(x_word, x_index, parent_h)
-            node_h[node_info[1]] = child_h
-            # node_h = torch.cat([node_h[:node_info[1]],
-            #                         child_h.reshape([1, self.hidden_dim]),
-            #                         node_h[node_info[1]+1:]])
-            return node_h#, child_h
-
-#        child_hs = []
-        #node_h = init_node_h
-        for x_word_i, x_index_i, tree_i in zip(x_word, x_index, tree) :
-            #print(tree_i)
-            node_h =_recurrence(x_word_i, x_index_i, tree_i, node_h)
-        #    child_hs.append(child_hs_i.reshape(1, -1))
-        #print(child_hs[0].shape, len(child_hs[num_parent-1:]),num_parent,len(child_hs))
-        # return torch.cat(child_hs[num_parent-1:], 0).max(dim=0).values
-        #print(node_h.shape,node_h[num_parent:].shape, num_nodes,num_parent)
-        #print(torch.max(node_h[num_parent:],dim=0).values.type(torch_dtype))
-        return torch.max(node_h[num_parent:],dim=0).values
-
-    """
+    
     def create_leaf_unit(self):
         dummy = torch.zeros([self.degree, self.hidden_dim], dtype=torch_dtype, device=self.device)
         def unit(leaf_word, leaf_index):
@@ -224,8 +197,7 @@ class RvNN(object):
             #print("BU",t)
             node_h, parent_h=_recurrence(w, x, t, idx, node_h)
 
-        #exit()
-        return parent_h.type(torch_dtype)
+        return parent_h
 
     def loss_fn(self, y, pred_y):
 
