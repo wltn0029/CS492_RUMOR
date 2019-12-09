@@ -174,22 +174,7 @@ class RvNN(object):
             h = z*parent_h + (1-z)*c
             return h
         return unit
-        """
-    def compute_tree(self, x_word, x_index, num_parent, tree):
-        num_nodes = x_word.shape[0]
-        node_h = torch.tensor(self.init_vector([num_nodes, self.hidden_dim]), device=self.device)
-        # use recurrence to compute internal node hidden states
-        def _recurrence(x_word, x_index, node_info, node):
-            helper_h = torch.ones([num_nodes, self.hidden_dim], device=self.device)
-            parent_h = node[node_info[0]]
-            child_h = self.recursive_unit(x_word, x_index, parent_h)
-            node[node_info[1]].add(child_h)
-            return node
-        for x_word_i, x_index_i, tree_i in zip(x_word, x_index, tree) :
-            #print(tree_i)
-            node_h =_recurrence(x_word_i, x_index_i, tree_i, node_h)
-        return torch.max(node_h[num_parent:],dim=0).values
-    """
+
     def compute_tree(self, x_word, x_index, num_parent, tree):
         self.num_nodes = x_word.shape[0]
         init_node_h = torch.tensor(self.init_vector([self.num_nodes, self.hidden_dim]), requires_grad = True, device=self.device)
@@ -207,12 +192,12 @@ class RvNN(object):
         child_hs = []
         node_h = init_node_h
         for x_word_i, x_index_i, tree_i in zip(x_word[:-1], x_index, tree) :
-            print(tree_i)
+            #print(tree_i)
             (updated_node_h, child_hs_i)=_recurrence(x_word_i, x_index_i, tree_i, node_h)
             child_hs.append(child_hs_i.reshape(1, -1))
             node_h = updated_node_h
-        exit()
-        return torch.cat(child_hs[num_parent-1:], 0)
+        
+        return torch.cat(child_hs[num_parent-1:], 0).max(dim=0).values
     """
     def compute_tree_test(self, x_word, x_index, tree):
         self.recursive_unit = self.create_recursive_unit()
